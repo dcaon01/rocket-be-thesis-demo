@@ -1,0 +1,141 @@
+name: deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      affected_apps:
+        required: true
+        type: string
+      commit_sha:
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    name: deploy
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    if: inputs.affected_apps != 'none'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Checkout infra
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ vars.TERRAFORM_REPO }}
+          token: ${{ secrets.PAT }}
+          path: infra
+
+      - name: OpenTofu
+        uses: opentofu/setup-opentofu@v2
+        with:
+          tofu_version: "1.8.0"
+
+      - name: AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars[format('{0}_TERRAFORM_ROLE', inputs.environment)] }}
+          role-session-name: GitHubActions-Terraform-${{ github.run_id }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: tofu init
+        working-directory: infra/be
+        env:
+          TF_VAR_use_aws_profile: "false"
+        run: |
+          rm -f .terraform/environment
+          tofu init -reconfigure -backend-config=../backend-configs/${{ inputs.environment }}-backend.tfbackend
+          tofu workspace select ${{ inputs.environment }} || tofu workspace new ${{ inputs.environment }}
+
+      - name: tofu plan
+        working-directory: infra/be
+        env:
+          TF_VAR_use_aws_profile: "false"
+          # Demo mode (INTEGRATIONS_ENABLED=false), not part of the original Rocket.
+          TF_VAR_domain_name: ${{ vars[format('{0}_DOMAIN_NAME', inputs.environment)] }}
+          TF_VAR_core_encryption_key: ${{ secrets[format('{0}_ENCRYPTION_KEY', inputs.environment)] }}
+          TF_VAR_core_hubspot_key: ${{ secrets[format('{0}_HUBSPOT_KEY', inputs.environment)] }}
+          TF_VAR_core_hubspot_client_secret: ${{ secrets[format('{0}_HUBSPOT_CLIENT_SECRET', inputs.environment)] }}
+          TF_VAR_core_keus_stripe_api_key: ${{ secrets[format('{0}_KEUS_STRIPE_API_KEY', inputs.environment)] }}
+          TF_VAR_core_keus_stripe_webhook_secret: ${{ secrets[format('{0}_KEUS_STRIPE_WEBHOOK_SECRET', inputs.environment)] }}
+          TF_VAR_core_keus_stripe_tax_rate_id: ${{ vars[format('{0}_KEUS_STRIPE_TAX_RATE_ID', inputs.environment)] }}
+          TF_VAR_core_sibill_api_token: ${{ secrets[format('{0}_SIBILL_API_TOKEN', inputs.environment)] }}
+          TF_VAR_core_sibill_company_id: ${{ vars[format('{0}_SIBILL_COMPANY_ID', inputs.environment)] }}
+          TF_VAR_core_sibill_api_url: ${{ vars[format('{0}_SIBILL_API_URL', inputs.environment)] }}
+          TF_VAR_core_hubspot_products_pipeline_id: ${{ vars[format('{0}_HUBSPOT_PRODUCTS_PIPELINE_ID', inputs.environment)] }}
+          TF_VAR_core_hubspot_api_url: ${{ vars.HUBSPOT_API_URL }}
+          TF_VAR_core_mixpanel_service_account_username: ${{ vars.MIXPANEL_SERVICE_ACCOUNT_USERNAME }}
+          TF_VAR_core_mixpanel_service_account_secret: ${{ secrets.MIXPANEL_SERVICE_ACCOUNT_SECRET }}
+          TF_VAR_core_mixpanel_api_base_url: ${{ vars.MIXPANEL_API_BASE_URL }}
+          TF_VAR_core_intercom_access_token: ${{ secrets[format('{0}_INTERCOM_ACCESS_TOKEN', inputs.environment)] }}
+          TF_VAR_core_intercom_api_url: ${{ vars.INTERCOM_API_URL }}
+          TF_VAR_core_sentry_auth_token: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          TF_VAR_core_sentry_org: ${{ vars.SENTRY_ORG }}
+          TF_VAR_core_sentry_api_url: ${{ vars.SENTRY_API_URL }}
+          TF_VAR_core_scheduler_role_arn: ${{ vars[format('{0}_SCHEDULER_ROLE_ARN', inputs.environment)] }}
+        run: |
+          TARGETS=""
+          VARS=""
+          for app in $(echo '${{ inputs.affected_apps }}' | jq -r '.[]'); do
+            TARGETS="$TARGETS -target=module.lambda_${app}"
+            VARS="$VARS -var=${app}_lambda_package_version=${{ inputs.commit_sha }}"
+          done
+
+          tofu plan \
+            $VARS \
+            $TARGETS \
+            -out=tfplan \
+            -detailed-exitcode || PLAN_EXIT=$?
+
+          if [ "${PLAN_EXIT:-0}" -eq 1 ]; then
+            echo "Tofu plan failed"
+            exit 1
+          fi
+
+      - name: Save plan
+        uses: actions/upload-artifact@v7
+        with:
+          name: terraform-plan-${{ inputs.environment }}-${{ inputs.commit_sha }}
+          path: infra/be/tfplan
+          retention-days: 5
+
+      - name: tofu apply
+        working-directory: infra/be
+        env:
+          TF_VAR_use_aws_profile: "false"
+          # Demo mode (INTEGRATIONS_ENABLED=false), not part of the original Rocket.
+          TF_VAR_domain_name: ${{ vars[format('{0}_DOMAIN_NAME', inputs.environment)] }}
+          TF_VAR_core_encryption_key: ${{ secrets[format('{0}_ENCRYPTION_KEY', inputs.environment)] }}
+          TF_VAR_core_hubspot_key: ${{ secrets[format('{0}_HUBSPOT_KEY', inputs.environment)] }}
+          TF_VAR_core_hubspot_client_secret: ${{ secrets[format('{0}_HUBSPOT_CLIENT_SECRET', inputs.environment)] }}
+          TF_VAR_core_keus_stripe_api_key: ${{ secrets[format('{0}_KEUS_STRIPE_API_KEY', inputs.environment)] }}
+          TF_VAR_core_keus_stripe_webhook_secret: ${{ secrets[format('{0}_KEUS_STRIPE_WEBHOOK_SECRET', inputs.environment)] }}
+          TF_VAR_core_keus_stripe_tax_rate_id: ${{ vars[format('{0}_KEUS_STRIPE_TAX_RATE_ID', inputs.environment)] }}
+          TF_VAR_core_sibill_api_token: ${{ secrets[format('{0}_SIBILL_API_TOKEN', inputs.environment)] }}
+          TF_VAR_core_sibill_company_id: ${{ vars[format('{0}_SIBILL_COMPANY_ID', inputs.environment)] }}
+          TF_VAR_core_sibill_api_url: ${{ vars[format('{0}_SIBILL_API_URL', inputs.environment)] }}
+          TF_VAR_core_hubspot_products_pipeline_id: ${{ vars[format('{0}_HUBSPOT_PRODUCTS_PIPELINE_ID', inputs.environment)] }}
+          TF_VAR_core_hubspot_api_url: ${{ vars.HUBSPOT_API_URL }}
+          TF_VAR_core_mixpanel_service_account_username: ${{ vars.MIXPANEL_SERVICE_ACCOUNT_USERNAME }}
+          TF_VAR_core_mixpanel_service_account_secret: ${{ secrets.MIXPANEL_SERVICE_ACCOUNT_SECRET }}
+          TF_VAR_core_mixpanel_api_base_url: ${{ vars.MIXPANEL_API_BASE_URL }}
+          TF_VAR_core_intercom_access_token: ${{ secrets[format('{0}_INTERCOM_ACCESS_TOKEN', inputs.environment)] }}
+          TF_VAR_core_intercom_api_url: ${{ vars.INTERCOM_API_URL }}
+          TF_VAR_core_sentry_auth_token: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          TF_VAR_core_sentry_org: ${{ vars.SENTRY_ORG }}
+          TF_VAR_core_sentry_api_url: ${{ vars.SENTRY_API_URL }}
+          TF_VAR_core_scheduler_role_arn: ${{ vars[format('{0}_SCHEDULER_ROLE_ARN', inputs.environment)] }}
+        run: tofu apply tfplan
+
+      - name: Tag deploy
+        run: |
+          TAG_NAME="last-deploy-${{ inputs.environment }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f "$TAG_NAME" ${{ inputs.commit_sha }}
+          git push -f origin "$TAG_NAME"

@@ -1,0 +1,80 @@
+{
+  "name": "core",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/core/src",
+  "projectType": "application",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/apps/core",
+        "main": "apps/core/src/main.ts",
+        "tsConfig": "apps/core/tsconfig.app.json",
+        "assets": ["apps/core/src/assets"]
+      },
+      "configurations": {
+        "production": {
+          "optimization": true,
+          "extractLicenses": true,
+          "inspect": false
+        }
+      }
+    },
+    "build:ncc": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
+      "options": {
+        "command": "ncc build apps/core/src/main.ts -o dist/apps/core --minify --no-source-map-register --no-cache --target es2020 --transpile-only"
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "options": {
+        "buildTarget": "core:build",
+        "inspect": false,
+        "port": 3155
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "core:build:development",
+          "args": [],
+          "watch": true
+        },
+        "production": {
+          "buildTarget": "core:build:production",
+          "args": []
+        }
+      }
+    },
+    "start": {
+      "executor": "@nx/js:node",
+      "options": {
+        "file": "dist/apps/core/main.js"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": ["apps/core/**/*.ts"]
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "apps/core/jest.config.ts",
+        "passWithNoTests": true
+      },
+      "configurations": {
+        "ci": {
+          "ci": true,
+          "codeCoverage": true
+        }
+      }
+    }
+  }
+}

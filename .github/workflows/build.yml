@@ -1,0 +1,121 @@
+name: build
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+    outputs:
+      affected:
+        description: "Affected apps as JSON array"
+        value: ${{ jobs.detect.outputs.affected }}
+
+jobs:
+  detect:
+    name: detect
+    runs-on: ubuntu-latest
+    outputs:
+      affected: ${{ steps.nx-detect.outputs.affected }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          filter: tree:0
+          fetch-depth: 0
+
+      - name: Setup
+        uses: ./.github/actions/setup-environment
+        with:
+          node-version: "24"
+
+      - name: Fetch tags
+        run: git fetch --tags --force
+
+      - name: Detect affected
+        id: nx-detect
+        shell: bash
+        run: |
+          TAG_NAME="last-deploy-${{ inputs.environment }}"
+
+          if git rev-parse "refs/tags/$TAG_NAME" >/dev/null 2>&1; then
+            LAST_SUCCESS=$(git rev-parse "refs/tags/$TAG_NAME")
+            echo "Found previous deploy tag: $TAG_NAME ($LAST_SUCCESS)"
+          else
+            LAST_SUCCESS=$(git rev-list --max-parents=0 HEAD)
+            echo "No previous deploy tag found, using initial commit: $LAST_SUCCESS"
+          fi
+
+          APPS=$(npx nx show projects --affected --type app \
+            --base=$LAST_SUCCESS \
+            --head=HEAD)
+
+          if [ -z "$APPS" ]; then
+            echo "affected=none" >> $GITHUB_OUTPUT
+            echo "No affected apps found"
+          else
+            APPS_JSON=$(echo "$APPS" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            echo "affected=$APPS_JSON" >> $GITHUB_OUTPUT
+            echo "Affected apps: $APPS_JSON"
+          fi
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    needs: detect
+    if: needs.detect.outputs.affected != 'none'
+    strategy:
+      matrix:
+        app: ${{ fromJson(needs.detect.outputs.affected) }}
+      fail-fast: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Nx cache
+        uses: actions/cache@v5
+        with:
+          path: .nx/cache
+          key: nx-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          restore-keys: |
+            nx-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles('package-lock.json') }}-
+
+      - name: Setup
+        uses: ./.github/actions/setup-environment
+        with:
+          node-version: "24"
+          setup-workspace: "true"
+
+      - name: Build
+        uses: ./.github/actions/build-and-package
+        with:
+          app: ${{ matrix.app }}
+          run-lint: "true"
+          run-tests: "false"
+
+  upload:
+    name: s3
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    needs: [detect, build]
+    if: needs.detect.outputs.affected != 'none'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars[format('{0}_CI_ROLE', inputs.environment)] }}
+          role-session-name: GitHubActions-${{ github.run_id }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Upload to S3
+        uses: ./.github/actions/upload-to-s3
+        with:
+          affected-apps: ${{ needs.detect.outputs.affected }}
+          s3-bucket: ${{ vars[format('{0}_LAMBDA_BUCKET', inputs.environment)] }}
+          s3-key-prefix: ${{ inputs.environment }}/${{ github.sha }}

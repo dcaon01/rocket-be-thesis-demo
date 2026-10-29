@@ -1,0 +1,65 @@
+name: 'Setup Environment'
+description: 'Setup Node.js, AWS credentials and caching for Rocket backend'
+
+inputs:
+  node-version:
+    description: 'Node.js version to install'
+    required: false
+    default: '24'
+  aws-role:
+    description: 'AWS IAM role ARN to assume'
+    required: false
+  aws-region:
+    description: 'AWS region'
+    required: false
+    default: 'eu-north-1'
+  cache-key-suffix:
+    description: 'Additional suffix for cache key'
+    required: false
+    default: ''
+  setup-workspace:
+    description: 'Setup Nx workspace with common library symlink'
+    required: false
+    default: 'false'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    # Caches node_modules itself: npm ci rebuilds it from scratch every time.
+    - name: node_modules cache
+      id: modules-cache
+      uses: actions/cache@v5
+      with:
+        path: node_modules
+        key: modules-${{ runner.os }}-node${{ inputs.node-version }}-${{ hashFiles('package-lock.json') }}
+
+    - name: Install
+      if: steps.modules-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: npm ci --prefer-offline
+
+    - name: Workspace symlinks
+      if: inputs.setup-workspace == 'true'
+      shell: bash
+      run: |
+        # libs/common is not an npm workspace, so it needs a manual symlink.
+        # Only replace that one: wiping the whole @rocket-be folder would also
+        # remove the workspace links npm ci creates (@rocket-be/scoping), and
+        # ncc would then leave an unresolved external require in the bundle,
+        # which fails at runtime on Lambda with MODULE_NOT_FOUND.
+        mkdir -p node_modules/@rocket-be
+        rm -rf node_modules/@rocket-be/common
+        ln -sf ../../libs/common node_modules/@rocket-be/common
+
+    - name: AWS credentials
+      if: inputs.aws-role != ''
+      uses: aws-actions/configure-aws-credentials@v6
+      with:
+        role-to-assume: ${{ inputs.aws-role }}
+        role-session-name: GitHubActions-${{ github.run_id }}
+        aws-region: ${{ inputs.aws-region }}

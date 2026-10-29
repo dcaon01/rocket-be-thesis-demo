@@ -1,0 +1,19 @@
+{
+  "name": "scoping",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/scoping/src",
+  "projectType": "library",
+  "tags": ["scope:shared"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "libs/scoping/dist",
+        "main": "libs/scoping/src/index.ts",
+        "tsConfig": "libs/scoping/tsconfig.lib.json",
+        "assets": []
+      }
+    }
+  }
+}

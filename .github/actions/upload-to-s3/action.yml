@@ -1,0 +1,46 @@
+name: 'Upload to S3'
+description: 'Upload application packages to S3 bucket'
+
+inputs:
+  affected-apps:
+    description: 'JSON array of affected applications'
+    required: true
+  s3-bucket:
+    description: 'S3 bucket name for uploads'
+    required: true
+  s3-key-prefix:
+    description: 'S3 key prefix (e.g., environment/commit-sha)'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v8
+      with:
+        path: artifacts/
+        merge-multiple: true
+
+    - name: Upload to S3
+      shell: bash
+      run: |
+        AFFECTED='${{ inputs.affected-apps }}'
+        PIDS=()
+
+        for app in $(echo "$AFFECTED" | jq -r '.[]'); do
+          PACKAGE_FILE="artifacts/${app}.zip"
+
+          if [ ! -f "$PACKAGE_FILE" ]; then
+            echo "❌ Package not found: $PACKAGE_FILE (artifacts dir: $(ls artifacts/))"
+            exit 1
+          fi
+
+          aws s3 cp "$PACKAGE_FILE" "s3://${{ inputs.s3-bucket }}/${{ inputs.s3-key-prefix }}/${app}.zip" --no-progress &
+          PIDS+=($!)
+        done
+
+        for pid in "${PIDS[@]}"; do
+          wait "$pid" || exit 1
+        done
+
+        echo "All packages uploaded successfully"

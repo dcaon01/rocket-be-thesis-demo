@@ -1,0 +1,27 @@
+name: ralph
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: write
+  actions: read
+
+jobs:
+  build:
+    name: build
+    uses: ./.github/workflows/build.yml
+    with:
+      environment: prod
+
+  deploy:
+    name: deploy
+    needs: build
+    if: needs.build.result == 'success' && needs.build.outputs.affected != 'none'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: prod
+      affected_apps: ${{ needs.build.outputs.affected }}
+      commit_sha: ${{ github.sha }}
+    secrets: inherit
