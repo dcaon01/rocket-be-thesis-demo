@@ -27,7 +27,7 @@ The products talk to Rocket through events. Rocket publishes on EventBridge what
 
 ## Demo mode
 
-Set `INTEGRATIONS_ENABLED=false` on the core app to run Rocket with nothing outside AWS: no products (O2, Genio, Pagai), no Stripe, Sibill, HubSpot, Intercom, Mixpanel or Sentry. When the variable is unset or `true`, Rocket behaves as usual.
+Set `INTEGRATIONS_ENABLED=false` on the core app to run Rocket with nothing outside AWS: no products (Nquadro, Genio, Pagai), no Stripe, Sibill, HubSpot, Intercom, Mixpanel or Sentry. When the variable is unset or `true`, Rocket behaves as usual.
 
 With the integrations off:
 - Rocket answers for the products. Instead of publishing on EventBridge, `DemoProductService` puts on the inbound queue the answer a product would send, so tenants and users get confirmed and the referent of the tenant accepts each new contract. For this the core Lambda needs `sqs:SendMessage` on the inbound queue.
