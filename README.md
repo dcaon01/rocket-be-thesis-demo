@@ -50,3 +50,7 @@ npm run lint
 ## Deployment
 
 The `ci` workflow runs on every push to `main`. It finds the applications changed since the last deploy (the `last-deploy-dev` tag), builds them, uploads the packages to S3 and runs `tofu apply` from the infrastructure repository to point the Lambdas at the new packages. It signs in to AWS through GitHub's OIDC provider, so the repository holds no AWS key. The secrets it reads are the encryption key of the core and the token used to check out the infrastructure repository.
+
+## Terms of use
+
+This code is published with the consent of Keus S.r.l. for academic and evaluation purposes only, as a companion to the thesis above. All rights are reserved. The repository may be read, cloned and run to examine the work described in the thesis, but neither the code nor any part of it may be used, copied, modified or redistributed for commercial purposes. For any other use, contact the author through GitHub: https://github.com/dcaon01.
