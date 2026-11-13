@@ -1,0 +1,80 @@
+{
+  "name": "cognito",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/cognito/src",
+  "projectType": "application",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/apps/cognito",
+        "main": "apps/cognito/src/main.ts",
+        "tsConfig": "apps/cognito/tsconfig.app.json",
+        "assets": ["apps/cognito/src/assets"]
+      },
+      "configurations": {
+        "production": {
+          "optimization": true,
+          "extractLicenses": true,
+          "inspect": false
+        }
+      }
+    },
+    "build:ncc": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
+      "options": {
+        "command": "ncc build apps/cognito/src/main.ts -o dist/apps/cognito --minify --no-source-map-register --no-cache --target es2020 --transpile-only"
+      }
+    },
+    "serve": {
+      "executor": "@nx/js:node",
+      "defaultConfiguration": "development",
+      "options": {
+        "buildTarget": "cognito:build",
+        "inspect": false,
+        "port": 3154
+      },
+      "configurations": {
+        "development": {
+          "buildTarget": "cognito:build:development",
+          "args": [],
+          "watch": true
+        },
+        "production": {
+          "buildTarget": "cognito:build:production",
+          "args": []
+        }
+      }
+    },
+    "start": {
+      "executor": "@nx/js:node",
+      "options": {
+        "file": "dist/apps/cognito/main.js"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": ["apps/cognito/**/*.ts"]
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "apps/cognito/jest.config.ts",
+        "passWithNoTests": true
+      },
+      "configurations": {
+        "ci": {
+          "ci": true,
+          "codeCoverage": true
+        }
+      }
+    }
+  }
+}

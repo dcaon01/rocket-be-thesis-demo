@@ -1,0 +1,38 @@
+{
+  "name": "rocket-shared",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/rocket-shared/src",
+  "projectType": "library",
+  "tags": ["scope:shared", "type:publishable"],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": ["{projectRoot}/dist"],
+      "inputs": [
+        "{workspaceRoot}/apps/core/src/commons/dtos/**/*",
+        "{workspaceRoot}/apps/core/src/commons/interfaces/**/*",
+        "{workspaceRoot}/apps/core/src/modules/tenants/dtos/**/*",
+        "{workspaceRoot}/apps/core/src/modules/tenants/enums/**/*",
+        "{workspaceRoot}/apps/core/src/modules/trials/dtos/**/*",
+        "{workspaceRoot}/apps/core/src/modules/trials/enums/**/*",
+        "{workspaceRoot}/apps/core/src/modules/users/dtos/**/*",
+        "{workspaceRoot}/apps/core/src/modules/sqs-events/lazy-sqs-events/interfaces/**/*",
+        "{projectRoot}/build.js",
+        "{projectRoot}/tsconfig.json",
+        "{projectRoot}/tsconfig.lib.json"
+      ],
+      "options": {
+        "command": "node build.js",
+        "cwd": "libs/rocket-shared"
+      }
+    },
+    "publish": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "npm publish",
+        "cwd": "libs/rocket-shared"
+      }
+    }
+  }
+}

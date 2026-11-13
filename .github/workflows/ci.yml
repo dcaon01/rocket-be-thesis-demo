@@ -1,0 +1,33 @@
+name: ci
+
+on:
+  push:
+    # Demo mode (INTEGRATIONS_ENABLED=false), not part of the original Rocket.
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: write
+  actions: read
+
+jobs:
+  build:
+    name: build
+    uses: ./.github/workflows/build.yml
+    with:
+      environment: dev
+
+  deploy:
+    name: deploy
+    needs: build
+    if: needs.build.result == 'success' && needs.build.outputs.affected != 'none'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: dev
+      affected_apps: ${{ needs.build.outputs.affected }}
+      commit_sha: ${{ github.sha }}
+    secrets: inherit

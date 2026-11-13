@@ -1,0 +1,11 @@
+{
+  "watch": ["src", "../../libs"],
+  "ignore": ["**/*.spec.ts", "**/*.test.ts", "dist", "node_modules", "**/*.d.ts"],
+  "ext": "ts,js,json",
+  "delay": 100,
+  "verbose": false,
+  "signal": "SIGTERM",
+  "env": {
+    "NODE_ENV": "development"
+  }
+}

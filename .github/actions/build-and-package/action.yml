@@ -1,0 +1,98 @@
+name: 'Build and Package App'
+description: 'Build, lint, and package a single Nx application'
+
+inputs:
+  app:
+    description: 'Application name to build'
+    required: true
+  run-lint:
+    description: 'Whether to run linting'
+    required: false
+    default: 'true'
+  run-tests:
+    description: 'Whether to run tests'
+    required: false
+    default: 'false'
+  package-format:
+    description: 'Package format (zip, tar)'
+    required: false
+    default: 'zip'
+
+outputs:
+  artifact-name:
+    description: 'Name of the created artifact'
+    value: ${{ steps.package.outputs.artifact-name }}
+  artifact-path:
+    description: 'Path to the created artifact'
+    value: ${{ steps.package.outputs.artifact-path }}
+
+runs:
+  using: 'composite'
+  steps:
+    # An app with its own build.sh (render, in Python) builds its zip by itself: no ncc, lint or run.sh.
+    - name: Detect build script
+      id: kind
+      shell: bash
+      run: |
+        if [ -f "apps/${{ inputs.app }}/build.sh" ]; then
+          echo "script=true" >> $GITHUB_OUTPUT
+        else
+          echo "script=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Build with its script
+      if: steps.kind.outputs.script == 'true'
+      shell: bash
+      run: ./apps/${{ inputs.app }}/build.sh
+
+    - name: Install ncc
+      if: steps.kind.outputs.script == 'false'
+      shell: bash
+      run: npm install -g @vercel/ncc
+
+    - name: Build
+      if: steps.kind.outputs.script == 'false'
+      shell: bash
+      run: npx nx run ${{ inputs.app }}:build:ncc
+
+    - name: Lint
+      if: steps.kind.outputs.script == 'false' && inputs.run-lint == 'true'
+      shell: bash
+      run: npx nx lint ${{ inputs.app }}
+
+    - name: Test
+      if: steps.kind.outputs.script == 'false' && inputs.run-tests == 'true'
+      shell: bash
+      run: npx nx test ${{ inputs.app }}
+
+    - name: Package
+      id: package
+      shell: bash
+      run: |
+        APP=${{ inputs.app }}
+        if [ "${{ steps.kind.outputs.script }}" = "true" ]; then
+          echo "artifact-name=${APP}-package" >> $GITHUB_OUTPUT
+          echo "artifact-path=dist/apps/${APP}.zip" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        cp libs/common/assets/run.sh dist/apps/$APP/
+        chmod +x dist/apps/$APP/run.sh
+
+        cd dist/apps/$APP
+        if [ "${{ inputs.package-format }}" = "tar" ]; then
+          tar -czf ../$APP.tar.gz .
+        else
+          zip -r ../$APP.zip .
+        fi
+        cd ../..
+
+        echo "artifact-name=${APP}-package" >> $GITHUB_OUTPUT
+        echo "artifact-path=dist/apps/${APP}.${{ inputs.package-format == 'tar' && 'tar.gz' || 'zip' }}" >> $GITHUB_OUTPUT
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ steps.package.outputs.artifact-name }}
+        path: ${{ steps.package.outputs.artifact-path }}
+        retention-days: 1

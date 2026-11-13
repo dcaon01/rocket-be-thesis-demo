@@ -1,0 +1,22 @@
+{
+  "name": "@keus/rocket-shared",
+  "version": "1.0.0",
+  "description": "Shared DTOs and enums for Rocket ecosystem",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node build.js",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "@nestjs/swagger": ">=7.0.0",
+    "class-validator": ">=0.14.0",
+    "class-transformer": ">=0.5.0"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}
